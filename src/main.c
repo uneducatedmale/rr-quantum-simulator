@@ -443,6 +443,32 @@ static double objective_value(const SimulationResult *r, int best_by) {
     }
 }
 
+static void print_sweep_rule(void) {
+    printf("+---------+-----------+-----------+-----------+-----------+-----------+\n");
+}
+
+static void print_sweep_header(void) {
+    print_sweep_rule();
+    printf("| %-7s | %-9s | %-9s | %-9s | %-9s | %-9s |\n",
+           "Quantum",
+           "AvgWait",
+           "AvgTurn",
+           "AvgResp",
+           "CtxSwitch",
+           "TotalTime");
+    print_sweep_rule();
+}
+
+static void print_sweep_row(int quantum, const SimulationResult *result) {
+    printf("| %7d | %9.2f | %9.2f | %9.2f | %9d | %9d |\n",
+           quantum,
+           result->average_waiting_time,
+           result->average_turnaround_time,
+           result->average_response_time,
+           result->context_switches,
+           result->total_time);
+}
+
 static int run_sweep(const Process *processes, int count, const CliOptions *options) {
     int quantum;
     int best_quantum = -1;
@@ -457,8 +483,7 @@ static int run_sweep(const Process *processes, int count, const CliOptions *opti
         printf("Best-by: %s (%s)\n", best_by_name(options->best_by), best_mode == 0 ? "min" : "max");
     }
     printf("\n");
-    printf("%-8s %-12s %-12s %-12s %-12s %-12s\n",
-           "Quantum", "AvgWait", "AvgTurn", "AvgResp", "CtxSwitch", "TotalTime");
+    print_sweep_header();
 
     if (options->csv_path != NULL) {
         csv = fopen(options->csv_path, "w");
@@ -494,13 +519,7 @@ static int run_sweep(const Process *processes, int count, const CliOptions *opti
             return 0;
         }
 
-        printf("%-8d %-12.2f %-12.2f %-12.2f %-12d %-12d\n",
-               quantum,
-               result.average_waiting_time,
-               result.average_turnaround_time,
-               result.average_response_time,
-               result.context_switches,
-               result.total_time);
+        print_sweep_row(quantum, &result);
 
         if (csv != NULL) {
             fprintf(csv, "%d,%.4f,%.4f,%.4f,%d,%d,%.6f,%.4f\n",
@@ -530,6 +549,8 @@ static int run_sweep(const Process *processes, int count, const CliOptions *opti
     if (csv != NULL) {
         fclose(csv);
     }
+
+    print_sweep_rule();
 
     if (show_best) {
         printf("\nBest quantum by %s (%s): %d\n", best_by_name(options->best_by), best_mode == 0 ? "min" : "max", best_quantum);

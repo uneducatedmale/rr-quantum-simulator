@@ -69,12 +69,14 @@ typedef struct {
     int w;
     int h;
     char *cells;
+    int *colors;
 } Canvas;
 
 static int canvas_init(Canvas *c, int w, int h) {
     c->w = 0;
     c->h = 0;
     c->cells = NULL;
+    c->colors = NULL;
 
     if (w <= 0 || h <= 0) {
         return 0;
@@ -83,21 +85,41 @@ static int canvas_init(Canvas *c, int w, int h) {
     if (c->cells == NULL) {
         return 0;
     }
+    c->colors = (int *)malloc(sizeof(int) * (size_t)w * (size_t)h);
+    if (c->colors == NULL) {
+        free(c->cells);
+        c->cells = NULL;
+        return 0;
+    }
     c->w = w;
     c->h = h;
     memset(c->cells, ' ', (size_t)w * (size_t)h);
+    {
+        int i;
+        for (i = 0; i < w * h; i++) {
+            c->colors[i] = -1;
+        }
+    }
     return 1;
 }
 
 static void canvas_free(Canvas *c) {
     free(c->cells);
+    free(c->colors);
     c->cells = NULL;
+    c->colors = NULL;
     c->w = 0;
     c->h = 0;
 }
 
 static void canvas_clear(Canvas *c, char fill) {
     memset(c->cells, fill, (size_t)c->w * (size_t)c->h);
+    {
+        int i;
+        for (i = 0; i < c->w * c->h; i++) {
+            c->colors[i] = -1;
+        }
+    }
 }
 
 static void canvas_put(Canvas *c, int x, int y, char ch) {
@@ -107,13 +129,21 @@ static void canvas_put(Canvas *c, int x, int y, char ch) {
     c->cells[(size_t)y * (size_t)c->w + (size_t)x] = ch;
 }
 
-static void canvas_put_str(Canvas *c, int x, int y, const char *s) {
+static void canvas_put_colored(Canvas *c, int x, int y, char ch, int color_code) {
+    if (x < 0 || y < 0 || x >= c->w || y >= c->h) {
+        return;
+    }
+    c->cells[(size_t)y * (size_t)c->w + (size_t)x] = ch;
+    c->colors[(size_t)y * (size_t)c->w + (size_t)x] = color_code;
+}
+
+static void canvas_put_str_colored(Canvas *c, int x, int y, const char *s, int color_code) {
     int i;
     if (s == NULL) {
         return;
     }
     for (i = 0; s[i] != '\0'; i++) {
-        canvas_put(c, x + i, y, s[i]);
+        canvas_put_colored(c, x + i, y, s[i], color_code);
     }
 }
 
@@ -144,10 +174,54 @@ static void canvas_box(Canvas *c, int x0, int y0, int x1, int y1) {
     canvas_put(c, x1, y1, '+');
 }
 
+static const char *ansi_for_canvas_color(int code) {
+    switch (code) {
+        case -1:
+            return NULL;
+        case 100:
+            return "\033[97m";
+        case 101:
+            return "\033[96m";
+        case 102:
+            return "\033[93m";
+        case 103:
+            return "\033[92m";
+        case 104:
+            return "\033[94m";
+        case 105:
+            return "\033[95m";
+        case 106:
+            return "\033[90m";
+        default:
+            return color_for_index(code);
+    }
+}
+
 static void canvas_print(const Canvas *c) {
     int y;
     for (y = 0; y < c->h; y++) {
-        fwrite(c->cells + (size_t)y * (size_t)c->w, 1, (size_t)c->w, stdout);
+        int x;
+        int active = -2;
+        for (x = 0; x < c->w; x++) {
+            int idx = y * c->w + x;
+            int code = c->colors[idx];
+            if (code != active) {
+                if (active != -2) {
+                    fputs(ANSI_RESET, stdout);
+                }
+                if (code >= -1) {
+                    const char *ansi = ansi_for_canvas_color(code);
+                    if (ansi != NULL) {
+                        fputs(ansi, stdout);
+                    }
+                }
+                active = code;
+            }
+            fputc(c->cells[idx], stdout);
+        }
+        if (active != -2) {
+            fputs(ANSI_RESET, stdout);
+        }
         fputc('\n', stdout);
     }
 }
@@ -166,6 +240,19 @@ static char symbol_for_process(int index) {
         return '?';
     }
     return alphabet[index];
+}
+
+static int index_for_symbol(char c) {
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'A' && c <= 'Z') {
+        return 10 + (c - 'A');
+    }
+    if (c >= 'a' && c <= 'z') {
+        return 36 + (c - 'a');
+    }
+    return -1;
 }
 
 typedef struct {
@@ -446,15 +533,14 @@ static void render_frame(const SimulationConfig *config,
                      queue_size(ready),
                      context_switches_so_far,
                      current_time > 0 ? ((double)busy_time_so_far / (double)current_time) * 100.0 : 0.0);
-            canvas_put_str(&canvas, 2, 0, header);
+            canvas_put_str_colored(&canvas, 2, 0, header, 100);
         }
 
-        /* Timeline strip (plain, no ANSI inside theatre to keep rendering simple). */
         if (gantt != NULL) {
             int start;
             int out_len;
             int x = 2;
-            canvas_put_str(&canvas, x, 2, "TIME:");
+            canvas_put_str_colored(&canvas, x, 2, "TIME:", 101);
             x += 6;
             if (gantt->filled < gantt->width) {
                 start = 0;
@@ -465,7 +551,25 @@ static void render_frame(const SimulationConfig *config,
             }
             for (i = 0; i < out_len && x + i < w - 2; i++) {
                 char c = gantt->buf[(start + i) % gantt->width];
-                canvas_put(&canvas, x + i, 2, c);
+                if (c == '|') {
+                    canvas_put_colored(&canvas, x + i, 2, c, 102);
+                } else if (c == ' ') {
+                    canvas_put(&canvas, x + i, 2, c);
+                } else {
+                    int idx = -1;
+                    if (c >= '0' && c <= '9') {
+                        idx = c - '0';
+                    } else if (c >= 'A' && c <= 'Z') {
+                        idx = 10 + (c - 'A');
+                    } else if (c >= 'a' && c <= 'z') {
+                        idx = 36 + (c - 'a');
+                    }
+                    if (idx >= 0) {
+                        canvas_put_colored(&canvas, x + i, 2, c, idx);
+                    } else {
+                        canvas_put(&canvas, x + i, 2, c);
+                    }
+                }
             }
         }
 
@@ -475,17 +579,17 @@ static void render_frame(const SimulationConfig *config,
             int x = cx + (int)lround(cos(a) * (double)r);
             int y = cy + (int)lround(sin(a) * (double)r * 0.5);
             char ch = (ring_i == (current_time % ring_n)) ? '@' : 'o';
-            canvas_put(&canvas, x, y, ch);
+            canvas_put_colored(&canvas, x, y, ch, ch == '@' ? 102 : 101);
         }
-        canvas_put_str(&canvas, cx - 4, cy - 1, " CPU ");
+        canvas_put_str_colored(&canvas, cx - 4, cy - 1, " CPU ", 100);
         if (running_label != NULL) {
-            canvas_put_str(&canvas, cx - 4, cy + 0, running_label);
+            canvas_put_str_colored(&canvas, cx - 4, cy + 0, running_label, 103);
         } else if (running != NULL) {
             char runline[64];
             snprintf(runline, sizeof(runline), "%s", running->pid);
-            canvas_put_str(&canvas, cx - 4, cy + 0, runline);
+            canvas_put_str_colored(&canvas, cx - 4, cy + 0, runline, 104);
         } else {
-            canvas_put_str(&canvas, cx - 4, cy + 0, "idle");
+            canvas_put_str_colored(&canvas, cx - 4, cy + 0, "idle", 106);
         }
         {
             char qline[64];
@@ -494,21 +598,21 @@ static void render_frame(const SimulationConfig *config,
             } else {
                 snprintf(qline, sizeof(qline), "qleft=%d", quantum_left);
             }
-            canvas_put_str(&canvas, cx - 6, cy + 2, qline);
+            canvas_put_str_colored(&canvas, cx - 6, cy + 2, qline, 102);
         }
         if (cs_left > 0) {
             /* Sparks during context switch. */
-            canvas_put(&canvas, cx - 2, cy - 4, '*');
-            canvas_put(&canvas, cx + 3, cy + 4, '*');
-            canvas_put(&canvas, cx + 6, cy - 1, '*');
+            canvas_put_colored(&canvas, cx - 2, cy - 4, '*', 102);
+            canvas_put_colored(&canvas, cx + 3, cy + 4, '*', 102);
+            canvas_put_colored(&canvas, cx + 6, cy - 1, '*', 102);
         }
 
         /* READY conveyor belt. */
         if (belt_len > 0) {
             for (i = 0; i < belt_len; i++) {
-                canvas_put(&canvas, belt_x0 + i, belt_y, '=');
+                canvas_put_colored(&canvas, belt_x0 + i, belt_y, '=', 103);
             }
-            canvas_put_str(&canvas, 2, belt_y - 2, "READY BELT:");
+            canvas_put_str_colored(&canvas, 2, belt_y - 2, "READY BELT:", 103);
             {
                 int n = queue_size(ready);
                 int k;
@@ -521,22 +625,89 @@ static void render_frame(const SimulationConfig *config,
                     }
                     sym = symbol_for_process(idx);
                     pos = (belt_x0 + (k * 4) + (current_time % 4)) % belt_len;
-                    canvas_put(&canvas, belt_x0 + pos, belt_y - 1, '[');
-                    canvas_put(&canvas, belt_x0 + pos + 1, belt_y - 1, sym);
-                    canvas_put(&canvas, belt_x0 + pos + 2, belt_y - 1, ']');
+                    canvas_put_colored(&canvas, belt_x0 + pos, belt_y - 1, '[', 103);
+                    canvas_put_colored(&canvas, belt_x0 + pos + 1, belt_y - 1, sym, idx);
+                    canvas_put_colored(&canvas, belt_x0 + pos + 2, belt_y - 1, ']', 103);
                 }
             }
         }
 
         /* Small legend for first few processes. */
         {
-            int max = count < 12 ? count : 12;
-            int y = 4;
-            canvas_put_str(&canvas, 2, y++, "LEGEND:");
-            for (i = 0; i < max && y < h - 6; i++) {
+            int max = count < 24 ? count : 24;
+            int rows = 12;
+            int col_width = 12;
+            int x0 = 2;
+            int y0 = 4;
+            int legend_idx[24];
+            int legend_count = 0;
+            int used[64] = {0};
+            canvas_put_str_colored(&canvas, x0, y0++, "LEGEND:", 105);
+
+            if (running != NULL) {
+                int idx = (int)(running - processes);
+                if (idx >= 0 && idx < count && idx < 64) {
+                    legend_idx[legend_count++] = idx;
+                    used[idx] = 1;
+                }
+            }
+
+            {
+                int n = queue_size(ready);
+                int k;
+                for (k = 0; k < n && legend_count < max; k++) {
+                    int idx;
+                    if (!queue_at(ready, k, &idx)) {
+                        continue;
+                    }
+                    if (idx >= 0 && idx < count && idx < 64 && !used[idx]) {
+                        legend_idx[legend_count++] = idx;
+                        used[idx] = 1;
+                    }
+                }
+            }
+
+            if (gantt != NULL) {
+                int start;
+                int out_len;
+                if (gantt->filled < gantt->width) {
+                    start = 0;
+                    out_len = gantt->filled;
+                } else {
+                    start = gantt->pos;
+                    out_len = gantt->width;
+                }
+                for (i = 0; i < out_len && legend_count < max; i++) {
+                    char c = gantt->buf[(start + i) % gantt->width];
+                    int idx = index_for_symbol(c);
+                    if (idx >= 0 && idx < count && idx < 64 && !used[idx]) {
+                        legend_idx[legend_count++] = idx;
+                        used[idx] = 1;
+                    }
+                }
+            }
+
+            for (i = 0; i < count && legend_count < max; i++) {
+                if (i < 64 && !used[i]) {
+                    legend_idx[legend_count++] = i;
+                    used[i] = 1;
+                }
+            }
+
+            for (i = 0; i < legend_count; i++) {
                 char line[64];
-                snprintf(line, sizeof(line), " %c = %s", symbol_for_process(i), processes[i].pid);
-                canvas_put_str(&canvas, 2, y++, line);
+                int idx = legend_idx[i];
+                char sym = symbol_for_process(idx);
+                int col = i / rows;
+                int row = i % rows;
+                int x = x0 + (col * col_width);
+                int y = y0 + row;
+                if (y >= h - 6) {
+                    break;
+                }
+                snprintf(line, sizeof(line), " %c = %s", sym, processes[idx].pid);
+                canvas_put_str_colored(&canvas, x, y, line, 100);
+                canvas_put_colored(&canvas, x + 1, y, sym, idx);
             }
         }
 
@@ -550,10 +721,13 @@ static void render_frame(const SimulationConfig *config,
                 int y1 = y0 + show_log + 2;
                 int start = (log->head + (log->count - show_log)) % log->capacity;
                 canvas_box(&canvas, x0, y0, w - 2, y1);
-                canvas_put_str(&canvas, x0 + 2, y0, "EVENT LOG");
+                for (i = x0; i <= w - 2; i++) {
+                    canvas_put_colored(&canvas, i, y0, canvas.cells[(size_t)y0 * (size_t)canvas.w + (size_t)i], 101);
+                }
+                canvas_put_str_colored(&canvas, x0 + 2, y0, "EVENT LOG", 100);
                 for (i = 0; i < show_log; i++) {
                     const char *line = log->lines + (size_t)((start + i) % log->capacity) * (size_t)log->width;
-                    canvas_put_str(&canvas, x0 + 2, y0 + 1 + i, line);
+                    canvas_put_str_colored(&canvas, x0 + 2, y0 + 1 + i, line, 100);
                 }
             }
         }
@@ -925,13 +1099,17 @@ int run_round_robin(const Process *input, int count, const SimulationConfig *con
 }
 
 void print_simulation_result(const SimulationResult *result) {
-    printf("Average waiting time   : %.2f\n", result->average_waiting_time);
-    printf("Average turnaround time: %.2f\n", result->average_turnaround_time);
-    printf("Average response time  : %.2f\n", result->average_response_time);
-    printf("Context switches       : %d\n", result->context_switches);
-    printf("Total time             : %d\n", result->total_time);
-    printf("Throughput             : %.4f processes/unit\n", result->throughput);
-    printf("CPU utilization        : %.2f%%\n", result->cpu_utilization);
+    printf("+-------------------------+------------------------+\n");
+    printf("| %-23s | %-22s |\n", "Metric", "Value");
+    printf("+-------------------------+------------------------+\n");
+    printf("| %-23s | %22.2f |\n", "Avg waiting time", result->average_waiting_time);
+    printf("| %-23s | %22.2f |\n", "Avg turnaround time", result->average_turnaround_time);
+    printf("| %-23s | %22.2f |\n", "Avg response time", result->average_response_time);
+    printf("| %-23s | %22d |\n", "Context switches", result->context_switches);
+    printf("| %-23s | %22d |\n", "Total time units", result->total_time);
+    printf("| %-23s | %22.4f |\n", "Throughput", result->throughput);
+    printf("| %-23s | %21.2f%% |\n", "CPU utilization", result->cpu_utilization);
+    printf("+-------------------------+------------------------+\n");
 }
 
 int run_fcfs(const Process *input, int count, const SimulationConfig *config, SimulationResult *result) {

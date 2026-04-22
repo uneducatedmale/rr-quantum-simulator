@@ -25,10 +25,14 @@ t=33 finish P3
 Input file: workloads/demo.txt
 Quantum   : 2
 CS cost   : 1
-Average waiting time   : 17.75
-Average turnaround time: 23.25
-Average response time  : 3.50
-Context switches       : 11
-Total time             : 33
-Throughput             : 0.1212 processes/unit
-CPU utilization        : 66.67%
++-------------------------+------------------------+
+| Metric                  | Value                  |
++-------------------------+------------------------+
+| Avg waiting time        |                  17.75 |
+| Avg turnaround time     |                  23.25 |
+| Avg response time       |                   3.50 |
+| Context switches        |                     11 |
+| Total time units        |                     33 |
+| Throughput              |                 0.1212 |
+| CPU utilization         |                 66.67% |
++-------------------------+------------------------+

@@ -3,3 +3,4 @@ rrsim
 *.out
 *.csv
 OScontext.txt
+.venv/
