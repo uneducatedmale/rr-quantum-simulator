@@ -1,0 +1,34 @@
+t=0 dispatch P1
+t=2 quantum-expire P1
+t=3 dispatch P2
+t=5 quantum-expire P2
+t=6 dispatch P3
+t=8 quantum-expire P3
+t=9 dispatch P1
+t=11 quantum-expire P1
+t=12 dispatch P4
+t=14 quantum-expire P4
+t=15 dispatch P2
+t=16 finish P2
+t=17 dispatch P3
+t=19 quantum-expire P3
+t=20 dispatch P1
+t=21 finish P1
+t=22 dispatch P4
+t=24 quantum-expire P4
+t=25 dispatch P3
+t=27 quantum-expire P3
+t=28 dispatch P4
+t=30 finish P4
+t=31 dispatch P3
+t=33 finish P3
+Input file: workloads/demo.txt
+Quantum   : 2
+CS cost   : 1
+Average waiting time   : 17.75
+Average turnaround time: 23.25
+Average response time  : 3.50
+Context switches       : 11
+Total time             : 33
+Throughput             : 0.1212 processes/unit
+CPU utilization        : 66.67%

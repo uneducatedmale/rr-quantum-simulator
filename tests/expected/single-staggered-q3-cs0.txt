@@ -1,0 +1,10 @@
+Input file: workloads/staggered.txt
+Quantum   : 3
+CS cost   : 0
+Average waiting time   : 7.60
+Average turnaround time: 12.20
+Average response time  : 3.00
+Context switches       : 8
+Total time             : 23
+Throughput             : 0.2174 processes/unit
+CPU utilization        : 100.00%

@@ -1,0 +1,12 @@
+Input file: workloads/demo.txt
+Context switch cost: 1
+
+Quantum  AvgWait      AvgTurn      AvgResp      CtxSwitch    TotalTime   
+1        24.25        29.75        2.75         21           43          
+2        17.75        23.25        3.50         11           33          
+3        11.75        17.25        5.00         7            29          
+4        13.00        18.50        5.25         6            28          
+5        9.25         14.75        6.25         5            27          
+6        8.50         14.00        6.50         4            26          
+
+Best quantum by average turnaround time: 6

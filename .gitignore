@@ -1,0 +1,5 @@
+rrsim
+*.o
+*.out
+*.csv
+OScontext.txt

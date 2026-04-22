@@ -1,0 +1,6 @@
+# pid arrival burst
+P1 0 9
+P2 2 4
+P3 3 2
+P4 7 5
+P5 9 3
