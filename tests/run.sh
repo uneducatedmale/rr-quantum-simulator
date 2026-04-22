@@ -12,6 +12,7 @@ need_file() {
   [[ -f "$1" ]] || fail "missing file: $1"
 }
 
+# Golden-output checks keep the CLI stable while the simulator evolves.
 run_and_compare() {
   local name="$1"
   local expected="$2"
@@ -38,6 +39,7 @@ run_and_compare() {
   rm -f "$tmp"
 }
 
+# Negative cases matter too; flag validation is part of the user-facing behavior.
 run_expect_fail() {
   local name="$1"
   shift 1
@@ -82,4 +84,3 @@ run_expect_fail "missing-input-file" \
   ./rrsim --input workloads/does-not-exist.txt --quantum 2 --cs 1
 
 echo "OK"
-

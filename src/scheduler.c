@@ -19,6 +19,7 @@
 
 static const char *ANSI_RESET = "\033[0m";
 
+/* Trace mode is intentionally minimal so it stays readable in tests and demos. */
 static void print_trace_dispatch(int time, const Process *process) {
     printf("t=%d dispatch %s\n", time, process->pid);
 }
@@ -65,6 +66,7 @@ static void cursor_show(void) {
     printf("\033[?25h");
 }
 
+/* Theatre mode draws into an off-screen canvas first so each frame can be printed cleanly. */
 typedef struct {
     int w;
     int h;
@@ -233,6 +235,7 @@ static void enqueue_arrivals(Process *processes, int count, int *next_arrival, i
     }
 }
 
+/* Symbols keep the live views compact even when there are a lot of processes. */
 static char symbol_for_process(int index) {
     static const char *alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     int n = (int)strlen(alphabet);
@@ -270,6 +273,7 @@ typedef struct {
     int count;
 } EventLog;
 
+/* The event log is just a small rolling window for the animation views. */
 static int eventlog_init(EventLog *log, int capacity, int width) {
     log->lines = NULL;
     log->capacity = 0;
@@ -344,6 +348,7 @@ static void gantt_free(Gantt *g) {
     g->filled = 0;
 }
 
+/* The Gantt strip is a ring buffer so long runs still fit on screen. */
 static void gantt_append(Gantt *g, char c) {
     if (g->width <= 0) {
         return;
@@ -500,6 +505,10 @@ static void render_frame(const SimulationConfig *config,
         return;
     }
 
+    /*
+     * Theatre mode is meant for presentation: one full-frame redraw that keeps
+     * the CPU, READY queue, timeline, and event log on screen together.
+     */
     if (config->style == 1) {
         Canvas canvas;
         int w = config->screen_w > 0 ? config->screen_w : 100;
@@ -742,6 +751,7 @@ static void render_frame(const SimulationConfig *config,
         return;
     }
 
+    /* HUD mode is more literal: same data, just rendered as a scrolling dashboard. */
     if (config->clear) {
         clear_screen();
     } else {
@@ -855,6 +865,10 @@ static void render_frame(const SimulationConfig *config,
     fflush(stdout);
 }
 
+/*
+ * Round Robin is simulated against a copied workload so the original parsed data
+ * can be reused across sweeps and policy comparisons.
+ */
 int run_round_robin(const Process *input, int count, const SimulationConfig *config, SimulationResult *result) {
     SimulationConfig effective;
     const SimulationConfig *cfg;
@@ -942,6 +956,7 @@ int run_round_robin(const Process *input, int count, const SimulationConfig *con
         }
 
         if (queue_is_empty(&ready)) {
+            /* No READY work: jump forward, or tick through idle time if animating. */
             if (next_arrival < count) {
                 if (cfg->animate) {
                     while (current_time < processes[next_arrival].arrival_time) {
@@ -991,6 +1006,7 @@ int run_round_robin(const Process *input, int count, const SimulationConfig *con
             eventlog_add(log_ptr, "t=%d dispatch %s", current_time, current->pid);
         }
 
+        /* One RR turn: run until the process finishes or its quantum runs out. */
         slice_len = current->remaining_time < cfg->quantum ? current->remaining_time : cfg->quantum;
         if (cfg->animate) {
             for (tick = 0; tick < slice_len; tick++) {
@@ -1028,6 +1044,7 @@ int run_round_robin(const Process *input, int count, const SimulationConfig *con
                 eventlog_add(log_ptr, "t=%d finish %s", current_time, current->pid);
             }
         } else {
+            /* Unfinished work goes back to the tail of READY, which is the core RR rule. */
             queue_push(&ready, current_index);
 
             if (cfg->trace) {
@@ -1039,6 +1056,7 @@ int run_round_robin(const Process *input, int count, const SimulationConfig *con
         }
 
         if (completed < count && (!queue_is_empty(&ready) || next_arrival < count)) {
+            /* Context-switch cost is charged between runnable turns, not after the final completion. */
             if (cfg->context_switch_cost > 0) {
                 context_switches++;
                 if (cfg->animate) {
@@ -1067,6 +1085,7 @@ int run_round_robin(const Process *input, int count, const SimulationConfig *con
         }
     }
 
+    /* Final metrics are derived from the per-process timestamps recorded during the run. */
     for (current_index = 0; current_index < count; current_index++) {
         turnaround = processes[current_index].completion_time - processes[current_index].arrival_time;
         waiting = turnaround - processes[current_index].burst_time;
@@ -1098,6 +1117,7 @@ int run_round_robin(const Process *input, int count, const SimulationConfig *con
     return 1;
 }
 
+/* Keep the single-run summary boxed so it is easy to read in demos and screenshots. */
 void print_simulation_result(const SimulationResult *result) {
     printf("+-------------------------+------------------------+\n");
     printf("| %-23s | %-22s |\n", "Metric", "Value");
@@ -1112,6 +1132,7 @@ void print_simulation_result(const SimulationResult *result) {
     printf("+-------------------------+------------------------+\n");
 }
 
+/* FCFS is included as a baseline, so the bookkeeping mirrors the RR result format. */
 int run_fcfs(const Process *input, int count, const SimulationConfig *config, SimulationResult *result) {
     Process *processes;
     int current_time = 0;

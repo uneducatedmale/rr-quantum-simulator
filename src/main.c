@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Keep all CLI state in one place so mode selection stays predictable. */
 typedef struct {
     const char *input_path;
     int quantum;
@@ -47,6 +48,7 @@ static void print_usage(const char *program_name) {
     printf("  %s --gen cpu|interactive|mixed --n <count> [--seed <n>] [--out <path>]\n", program_name);
 }
 
+/* Sweep ranges and theatre screen sizes are both encoded as a single flag value. */
 static int parse_sweep_range(const char *value, int *start_out, int *end_out) {
     return sscanf(value, "%d:%d", start_out, end_out) == 2 && *start_out > 0 && *end_out >= *start_out;
 }
@@ -150,6 +152,7 @@ static int parse_gen_kind(const char *value, int *gen_kind_out) {
     return 0;
 }
 
+/* Simple deterministic generator so demo workloads are easy to reproduce. */
 static unsigned int lcg_next(unsigned int *state) {
     *state = (*state * 1664525u) + 1013904223u;
     return *state;
@@ -166,6 +169,11 @@ static int gen_range(unsigned int *state, int lo, int hi) {
     return lo + (int)(x % (unsigned int)span);
 }
 
+/*
+ * Generated workloads are meant to be "good enough" inputs for experiments,
+ * not a model of real systems. Each preset just biases arrival spacing and
+ * burst sizes toward a different style of load.
+ */
 static int write_generated_workload(FILE *out, int kind, int n, unsigned int seed) {
     int i;
     unsigned int st = seed;
@@ -204,6 +212,10 @@ static int write_generated_workload(FILE *out, int kind, int n, unsigned int see
     return 1;
 }
 
+/*
+ * Argument parsing also handles validation so the rest of main can assume each
+ * execution mode has a sensible configuration.
+ */
 static int parse_args(int argc, char **argv, CliOptions *options) {
     int i;
 
@@ -351,6 +363,7 @@ static int parse_args(int argc, char **argv, CliOptions *options) {
     return options->quantum > 0;
 }
 
+/* Single-run mode is shared by plain RR runs and the FCFS baseline. */
 static int run_single(const Process *processes, int count, const CliOptions *options) {
     SimulationConfig config;
     SimulationResult result;
@@ -443,6 +456,7 @@ static double objective_value(const SimulationResult *r, int best_by) {
     }
 }
 
+/* The sweep table is part of the presentation flow, so the formatting is fixed-width. */
 static void print_sweep_rule(void) {
     printf("+---------+-----------+-----------+-----------+-----------+-----------+\n");
 }
@@ -469,6 +483,10 @@ static void print_sweep_row(int quantum, const SimulationResult *result) {
            result->total_time);
 }
 
+/*
+ * Sweep mode reuses the same workload and only changes q. That keeps the
+ * comparison honest: if the numbers move, they moved because the time slice did.
+ */
 static int run_sweep(const Process *processes, int count, const CliOptions *options) {
     int quantum;
     int best_quantum = -1;
@@ -572,6 +590,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    /* Workload generation is handled up front because it does not need the parser. */
     if (options.generate) {
         if (options.gen_out_path != NULL) {
             gen_out = fopen(options.gen_out_path, "w");
@@ -600,6 +619,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    /* From this point on, the only branch is which analysis mode to run. */
     if (options.use_sweep) {
         ok = run_sweep(processes, count, &options);
     } else {

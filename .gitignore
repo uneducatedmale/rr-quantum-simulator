@@ -4,4 +4,7 @@ rrsim
 *.csv
 OScontext.txt
 .venv/
+docs/
+slides/
+scripts/
 slides/.~lock*

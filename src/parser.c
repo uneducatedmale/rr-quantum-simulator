@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Normalizing the workload order here keeps the scheduler loop simpler later on. */
 static int compare_by_arrival_then_pid(const void *left, const void *right) {
     const Process *a = (const Process *)left;
     const Process *b = (const Process *)right;
@@ -15,6 +16,11 @@ static int compare_by_arrival_then_pid(const void *left, const void *right) {
     return strcmp(a->pid, b->pid);
 }
 
+/*
+ * The parser only accepts the three fields the simulator actually uses. As each
+ * process is loaded, runtime bookkeeping fields are initialized so the scheduler
+ * can work on a clean copy without extra setup.
+ */
 int load_workload(const char *path, Process **processes_out, int *count_out) {
     FILE *file;
     Process *processes;
@@ -60,6 +66,7 @@ int load_workload(const char *path, Process **processes_out, int *count_out) {
             processes = grown;
         }
 
+        /* The simulation updates these fields in-place on a copied workload. */
         process.remaining_time = process.burst_time;
         process.first_start_time = -1;
         process.completion_time = -1;

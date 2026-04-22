@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 
+/* READY uses a fixed-size circular queue because the process count is known. */
 int queue_init(IntQueue *queue, int capacity) {
     queue->data = (int *)malloc(sizeof(int) * capacity);
     if (queue->data == NULL) {
@@ -29,6 +30,7 @@ int queue_push(IntQueue *queue, int value) {
         return 0;
     }
 
+    /* Circular indexing avoids shuffling elements on every requeue. */
     back = (queue->front + queue->size) % queue->capacity;
     queue->data[back] = value;
     queue->size++;
@@ -61,6 +63,7 @@ int queue_at(const IntQueue *queue, int index, int *value_out) {
         return 0;
     }
 
+    /* Random access is only for visualization; scheduling still stays FIFO. */
     pos = (queue->front + index) % queue->capacity;
     *value_out = queue->data[pos];
     return 1;

@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+#
+# Demo flow:
+#   1. prove the build/test path still works
+#   2. show how q changes the numbers
+#   3. show that "best" depends on the metric
+#   4. use animation to make the scheduler behavior intuitive
+#   5. finish with an FCFS baseline
+#
+
 reset_terminal() {
   printf '\033[0m\033[?25h\033[3J\033[2J\033[H'
   stty sane 2>/dev/null || true
 }
 
 pause() {
+  # Only prompt when the script is running in a real terminal.
   if [[ ! -t 0 ]]; then
     return
   fi
